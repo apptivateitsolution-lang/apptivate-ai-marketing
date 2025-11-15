@@ -2,30 +2,27 @@ import React, { useState, useEffect } from "react";
 
 // Apptivate AI Marketing - Personal Edition (Single-file React + Tailwind)
 // - Simple prototype for ChatGPT Canvas preview
-// - Uses localStorage for persistence
+// - Uses localStorage for persistence (loaded on mount to avoid SSR errors)
 // - Mock AI function included. Replace `callAI()` with real API call (OpenAI/Gemini) later.
 
 export default function ApptivateAIMarketing() {
-  // Company profile
-  const [profile, setProfile] = useState(() => {
-    return (
-      JSON.parse(localStorage.getItem("apptivate_profile")) || {
-        companyName: "Apptivate It Solution",
-        services: "Website Development, SEO, Digital Marketing, IT Hardware",
-        website: "",
-        instagram: "",
-        gmb: "",
-        location: "Surat, Gujarat",
-      }
-    );
-  });
+  // Safe defaults used initially (avoid reading localStorage during SSR)
+  const defaultProfile = {
+    companyName: "Apptivate It Solution",
+    services: "Website Development, SEO, Digital Marketing, IT Hardware",
+    website: "",
+    instagram: "",
+    gmb: "",
+    location: "Surat, Gujarat",
+  };
 
+  const [profile, setProfile] = useState(defaultProfile);
   const [editingProfile, setEditingProfile] = useState(false);
 
   // App state
   const [tab, setTab] = useState("dashboard");
   const [chatInput, setChatInput] = useState("");
-  const [chatLog, setChatLog] = useState(() => JSON.parse(localStorage.getItem("apptivate_chatlog")) || []);
+  const [chatLog, setChatLog] = useState([]);
 
   const [postPlatform, setPostPlatform] = useState("Instagram");
   const [postService, setPostService] = useState("Website Development");
@@ -35,35 +32,62 @@ export default function ApptivateAIMarketing() {
   const [auditUrl, setAuditUrl] = useState("");
   const [auditResult, setAuditResult] = useState(null);
 
-  const [growthEntries, setGrowthEntries] = useState(() => JSON.parse(localStorage.getItem("apptivate_growth")) || []);
+  const [growthEntries, setGrowthEntries] = useState([]);
   const [followers, setFollowers] = useState("");
   const [projects, setProjects] = useState("");
 
   // Voice
   const [ttsEnabled, setTtsEnabled] = useState(true);
 
+  // Load persisted data on mount (browser only)
   useEffect(() => {
-    localStorage.setItem("apptivate_profile", JSON.stringify(profile));
+    if (typeof window === "undefined") return;
+    try {
+      const p = JSON.parse(localStorage.getItem("apptivate_profile"));
+      if (p) setProfile(p);
+    } catch (e) {
+      // ignore parse errors
+    }
+    try {
+      const c = JSON.parse(localStorage.getItem("apptivate_chatlog"));
+      if (Array.isArray(c)) setChatLog(c);
+    } catch (e) {}
+
+    try {
+      const g = JSON.parse(localStorage.getItem("apptivate_growth"));
+      if (Array.isArray(g)) setGrowthEntries(g);
+    } catch (e) {}
+  }, []);
+
+  // Persist changes (guard for browser)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("apptivate_profile", JSON.stringify(profile));
+    } catch (e) {}
   }, [profile]);
 
   useEffect(() => {
-    localStorage.setItem("apptivate_chatlog", JSON.stringify(chatLog));
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("apptivate_chatlog", JSON.stringify(chatLog));
+    } catch (e) {}
   }, [chatLog]);
 
   useEffect(() => {
-    localStorage.setItem("apptivate_growth", JSON.stringify(growthEntries));
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("apptivate_growth", JSON.stringify(growthEntries));
+    } catch (e) {}
   }, [growthEntries]);
 
   // --- Mock AI call ---
   async function callAI(prompt, mode = "chat") {
     // This is a placeholder - replace with actual API call.
-    // Example for OpenAI (server-side): call OpenAI with prompt and return result.
-
-    // For prototype we return simple deterministic responses to feel interactive.
     await new Promise((r) => setTimeout(r, 700));
 
     if (mode === "chat") {
-      return `Suggestion for Apptivate: \n- Focus on local SEO for ${profile.location}.\n- Post case study reels twice weekly.\n- Start a quick WhatsApp pitch for local shops.`;
+      return `Suggestion for ${profile.companyName}: \n- Focus on local SEO for ${profile.location}.\n- Post case study reels twice weekly.\n- Start a quick WhatsApp pitch for local shops.`;
     }
 
     if (mode === "post") {
@@ -83,7 +107,7 @@ export default function ApptivateAIMarketing() {
         fixes: [
           "Add SEO meta title and description with local keywords",
           "Post 3 reels weekly and add highlights",
-          "Upload 3 new photos to Google Business and ask 5 customers for reviews" ,
+          "Upload 3 new photos to Google Business and ask 5 customers for reviews",
         ],
         quickPost: `Posted: 'We just launched a new website project for a local client! Check link in bio. #Apptivate'`,
         goal: "Get 10 leads this month",
@@ -120,14 +144,22 @@ export default function ApptivateAIMarketing() {
   }
 
   function savePostResult() {
-    const saved = JSON.parse(localStorage.getItem("apptivate_saved")) || [];
+    if (typeof window === "undefined") {
+      alert("Save is available in browser only.");
+      return;
+    }
+    const saved = JSON.parse(localStorage.getItem("apptivate_saved") || "[]");
     saved.push({ type: "post", created: new Date().toISOString(), data: postResult });
     localStorage.setItem("apptivate_saved", JSON.stringify(saved));
     alert("Saved to history");
   }
 
   function saveAuditResult() {
-    const saved = JSON.parse(localStorage.getItem("apptivate_saved")) || [];
+    if (typeof window === "undefined") {
+      alert("Save is available in browser only.");
+      return;
+    }
+    const saved = JSON.parse(localStorage.getItem("apptivate_saved") || "[]");
     saved.push({ type: "audit", created: new Date().toISOString(), data: auditResult });
     localStorage.setItem("apptivate_saved", JSON.stringify(saved));
     alert("Audit saved");
@@ -135,7 +167,9 @@ export default function ApptivateAIMarketing() {
 
   function addGrowthEntry() {
     if (!followers && !projects) return;
-    const entry = { date: new Date().toISOString(), followers: followers || 0, projects: projects || 0 };
+    const f = parseInt(String(followers).trim() || "0", 10);
+    const p = parseInt(String(projects).trim() || "0", 10);
+    const entry = { date: new Date().toISOString(), followers: isNaN(f) ? 0 : f, projects: isNaN(p) ? 0 : p };
     setGrowthEntries((g) => [...g, entry]);
     setFollowers("");
     setProjects("");
@@ -143,7 +177,7 @@ export default function ApptivateAIMarketing() {
   }
 
   function speak(text) {
-    if (!window.speechSynthesis) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "en-IN";
     window.speechSynthesis.cancel();
@@ -173,16 +207,16 @@ export default function ApptivateAIMarketing() {
           <div className="bg-slate-800 p-4 rounded mb-6">
             <h2 className="font-semibold">Edit Company Profile</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              <input className="p-2 rounded bg-slate-700" value={profile.companyName} onChange={(e)=>setProfile({...profile, companyName: e.target.value})} />
-              <input className="p-2 rounded bg-slate-700" value={profile.services} onChange={(e)=>setProfile({...profile, services: e.target.value})} />
-              <input className="p-2 rounded bg-slate-700" placeholder="Website" value={profile.website} onChange={(e)=>setProfile({...profile, website: e.target.value})} />
-              <input className="p-2 rounded bg-slate-700" placeholder="Instagram" value={profile.instagram} onChange={(e)=>setProfile({...profile, instagram: e.target.value})} />
-              <input className="p-2 rounded bg-slate-700" placeholder="Google Business" value={profile.gmb} onChange={(e)=>setProfile({...profile, gmb: e.target.value})} />
-              <input className="p-2 rounded bg-slate-700" placeholder="Location" value={profile.location} onChange={(e)=>setProfile({...profile, location: e.target.value})} />
+              <input className="p-2 rounded bg-slate-700" value={profile.companyName} onChange={(e) => setProfile({ ...profile, companyName: e.target.value })} />
+              <input className="p-2 rounded bg-slate-700" value={profile.services} onChange={(e) => setProfile({ ...profile, services: e.target.value })} />
+              <input className="p-2 rounded bg-slate-700" placeholder="Website" value={profile.website} onChange={(e) => setProfile({ ...profile, website: e.target.value })} />
+              <input className="p-2 rounded bg-slate-700" placeholder="Instagram" value={profile.instagram} onChange={(e) => setProfile({ ...profile, instagram: e.target.value })} />
+              <input className="p-2 rounded bg-slate-700" placeholder="Google Business" value={profile.gmb} onChange={(e) => setProfile({ ...profile, gmb: e.target.value })} />
+              <input className="p-2 rounded bg-slate-700" placeholder="Location" value={profile.location} onChange={(e) => setProfile({ ...profile, location: e.target.value })} />
             </div>
             <div className="mt-3 flex gap-2">
-              <button className="px-4 py-2 bg-blue-600 rounded" onClick={()=>{setEditingProfile(false); alert('Saved profile')}}>Save</button>
-              <button className="px-4 py-2 bg-slate-600 rounded" onClick={()=>setEditingProfile(false)}>Cancel</button>
+              <button className="px-4 py-2 bg-blue-600 rounded" onClick={() => { setEditingProfile(false); alert('Saved profile'); }}>Save</button>
+              <button className="px-4 py-2 bg-slate-600 rounded" onClick={() => setEditingProfile(false)}>Cancel</button>
             </div>
           </div>
         )}
@@ -195,7 +229,7 @@ export default function ApptivateAIMarketing() {
                 <h3 className="font-medium">Quick Audit</h3>
                 <p className="text-slate-300 text-sm">Run a quick audit for your website or Instagram</p>
                 <div className="mt-3 flex gap-2">
-                  <input className="flex-1 p-2 rounded bg-slate-600" placeholder="Paste website or IG link" value={auditUrl} onChange={(e)=>setAuditUrl(e.target.value)} />
+                  <input className="flex-1 p-2 rounded bg-slate-600" placeholder="Paste website or IG link" value={auditUrl} onChange={(e) => setAuditUrl(e.target.value)} />
                   <button className="px-3 py-2 bg-blue-600 rounded" onClick={handleAudit}>Run</button>
                 </div>
               </div>
@@ -204,17 +238,17 @@ export default function ApptivateAIMarketing() {
                 <h3 className="font-medium">Generate Post</h3>
                 <p className="text-slate-300 text-sm">Create captions and image ideas fast</p>
                 <div className="mt-3 grid grid-cols-1 gap-2">
-                  <select className="p-2 rounded bg-slate-600" value={postPlatform} onChange={(e)=>setPostPlatform(e.target.value)}>
+                  <select className="p-2 rounded bg-slate-600" value={postPlatform} onChange={(e) => setPostPlatform(e.target.value)}>
                     <option>Instagram</option>
                     <option>LinkedIn</option>
                     <option>Facebook</option>
                   </select>
-                  <select className="p-2 rounded bg-slate-600" value={postService} onChange={(e)=>setPostService(e.target.value)}>
+                  <select className="p-2 rounded bg-slate-600" value={postService} onChange={(e) => setPostService(e.target.value)}>
                     <option>Website Development</option>
                     <option>SEO</option>
                     <option>IT Support</option>
                   </select>
-                  <select className="p-2 rounded bg-slate-600" value={postGoal} onChange={(e)=>setPostGoal(e.target.value)}>
+                  <select className="p-2 rounded bg-slate-600" value={postGoal} onChange={(e) => setPostGoal(e.target.value)}>
                     <option>Leads</option>
                     <option>Engagement</option>
                     <option>Branding</option>
@@ -226,9 +260,9 @@ export default function ApptivateAIMarketing() {
               <div className="bg-slate-700 p-4 rounded">
                 <h3 className="font-medium">Quick Actions</h3>
                 <div className="mt-3 flex flex-col gap-2">
-                  <button className="p-2 bg-slate-600 rounded" onClick={()=>setTab('chat')}>Ask AI Strategy</button>
-                  <button className="p-2 bg-slate-600 rounded" onClick={()=>setTab('messages')}>Write Message</button>
-                  <button className="p-2 bg-slate-600 rounded" onClick={()=>setTab('growth')}>Add Growth Data</button>
+                  <button className="p-2 bg-slate-600 rounded" onClick={() => setTab('chat')}>Ask AI Strategy</button>
+                  <button className="p-2 bg-slate-600 rounded" onClick={() => setTab('messages')}>Write Message</button>
+                  <button className="p-2 bg-slate-600 rounded" onClick={() => setTab('growth')}>Add Growth Data</button>
                 </div>
               </div>
             </div>
@@ -238,16 +272,16 @@ export default function ApptivateAIMarketing() {
                 <h3 className="font-medium">Recent Chat</h3>
                 <div className="mt-2 space-y-2 max-h-48 overflow-auto">
                   {chatLog.slice(-6).map((m, i) => (
-                    <div key={i} className={`p-2 rounded ${m.who==='you'? 'bg-slate-600 text-right':'bg-slate-800 text-left'}`}>
+                    <div key={i} className={`p-2 rounded ${m.who === 'you' ? 'bg-slate-600 text-right' : 'bg-slate-800 text-left'}`}>
                       <div className="text-sm">{m.text}</div>
                     </div>
                   ))}
                 </div>
                 <div className="mt-2">
-                  <input className="w-full p-2 rounded bg-slate-600" placeholder="Ask strategy or marketing question" value={chatInput} onChange={(e)=>setChatInput(e.target.value)} />
+                  <input className="w-full p-2 rounded bg-slate-600" placeholder="Ask strategy or marketing question" value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
                   <div className="mt-2 flex gap-2">
                     <button className="px-3 py-2 bg-blue-600 rounded" onClick={handleChatSubmit}>Send</button>
-                    <button className="px-3 py-2 bg-slate-600 rounded" onClick={()=>{setTtsEnabled(!ttsEnabled)}}>{ttsEnabled? 'Voice: On':'Voice: Off'}</button>
+                    <button className="px-3 py-2 bg-slate-600 rounded" onClick={() => { setTtsEnabled(!ttsEnabled); }}>{ttsEnabled ? 'Voice: On' : 'Voice: Off'}</button>
                   </div>
                 </div>
               </div>
@@ -256,7 +290,11 @@ export default function ApptivateAIMarketing() {
                 <h3 className="font-medium">Saved Items</h3>
                 <div className="mt-2 text-slate-300 text-sm">Saved outputs (posts, audits) are stored in your browser local storage.</div>
                 <div className="mt-3">
-                  <button className="px-3 py-2 bg-slate-600 rounded" onClick={()=>{const s = JSON.parse(localStorage.getItem('apptivate_saved')||'[]'); alert(JSON.stringify(s.slice(-3), null, 2))}}>View Recent Saved</button>
+                  <button className="px-3 py-2 bg-slate-600 rounded" onClick={() => {
+                    if (typeof window === "undefined") { alert("Browser only"); return; }
+                    const s = JSON.parse(localStorage.getItem('apptivate_saved') || '[]');
+                    alert(JSON.stringify(s.slice(-3), null, 2));
+                  }}>View recent saved</button>
                 </div>
               </div>
             </div>
@@ -270,16 +308,16 @@ export default function ApptivateAIMarketing() {
             <h2 className="font-bold mb-2">AI Marketing Chat</h2>
             <p className="text-slate-300 text-sm mb-3">Ask any marketing question. AI will answer with steps, captions, or messages.</p>
             <div className="space-y-2">
-              <textarea className="w-full p-3 rounded bg-slate-600" rows={4} placeholder="How can I get leads for my website design service this month?" value={chatInput} onChange={(e)=>setChatInput(e.target.value)} />
+              <textarea className="w-full p-3 rounded bg-slate-600" rows={4} placeholder="How can I get leads for my website design service this month?" value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
               <div className="flex gap-2">
                 <button className="px-4 py-2 bg-blue-600 rounded" onClick={handleChatSubmit}>Ask AI</button>
-                <button className="px-4 py-2 bg-slate-600 rounded" onClick={()=>{setChatInput('Generate 5 Instagram post ideas for Website Development with captions and hashtags')}}>Example: Post Ideas</button>
+                <button className="px-4 py-2 bg-slate-600 rounded" onClick={() => { setChatInput('Generate 5 Instagram post ideas for Website Development with captions and hashtags'); }}>Example: Post Ideas</button>
               </div>
             </div>
             <div className="mt-4 space-y-3">
-              {chatLog.map((m,i)=> (
-                <div key={i} className={`${m.who==='you' ? 'text-right' : ''}`}>
-                  <div className={`inline-block p-3 rounded ${m.who==='you' ? 'bg-slate-600' : 'bg-slate-800'}`}>{m.text}</div>
+              {chatLog.map((m, i) => (
+                <div key={i} className={`${m.who === 'you' ? 'text-right' : ''}`}>
+                  <div className={`inline-block p-3 rounded ${m.who === 'you' ? 'bg-slate-600' : 'bg-slate-800'}`}>{m.text}</div>
                 </div>
               ))}
             </div>
@@ -293,7 +331,7 @@ export default function ApptivateAIMarketing() {
             <div className="grid md:grid-cols-2 gap-3 mt-3">
               <div>
                 <label className="text-sm text-slate-300">Platform</label>
-                <select className="w-full p-2 rounded bg-slate-600" value={postPlatform} onChange={(e)=>setPostPlatform(e.target.value)}>
+                <select className="w-full p-2 rounded bg-slate-600" value={postPlatform} onChange={(e) => setPostPlatform(e.target.value)}>
                   <option>Instagram</option>
                   <option>LinkedIn</option>
                   <option>Facebook</option>
@@ -301,7 +339,7 @@ export default function ApptivateAIMarketing() {
               </div>
               <div>
                 <label className="text-sm text-slate-300">Service</label>
-                <select className="w-full p-2 rounded bg-slate-600" value={postService} onChange={(e)=>setPostService(e.target.value)}>
+                <select className="w-full p-2 rounded bg-slate-600" value={postService} onChange={(e) => setPostService(e.target.value)}>
                   <option>Website Development</option>
                   <option>SEO</option>
                   <option>IT Support</option>
@@ -310,7 +348,7 @@ export default function ApptivateAIMarketing() {
             </div>
             <div className="mt-3">
               <label className="text-sm text-slate-300">Goal</label>
-              <select className="w-full p-2 rounded bg-slate-600" value={postGoal} onChange={(e)=>setPostGoal(e.target.value)}>
+              <select className="w-full p-2 rounded bg-slate-600" value={postGoal} onChange={(e) => setPostGoal(e.target.value)}>
                 <option>Leads</option>
                 <option>Engagement</option>
                 <option>Branding</option>
@@ -318,7 +356,7 @@ export default function ApptivateAIMarketing() {
             </div>
             <div className="mt-3 flex gap-2">
               <button className="px-4 py-2 bg-blue-600 rounded" onClick={handleGeneratePost}>Generate Post</button>
-              <button className="px-4 py-2 bg-slate-600 rounded" onClick={()=>{setPostResult(null); setPostPlatform('Instagram'); setPostService('Website Development'); setPostGoal('Leads')}}>Reset</button>
+              <button className="px-4 py-2 bg-slate-600 rounded" onClick={() => { setPostResult(null); setPostPlatform('Instagram'); setPostService('Website Development'); setPostGoal('Leads'); }}>Reset</button>
             </div>
 
             {postResult && (
@@ -330,7 +368,14 @@ export default function ApptivateAIMarketing() {
                 <p className="mt-2 text-sm text-slate-400">Suggested time: {postResult.time}</p>
                 <div className="mt-3 flex gap-2">
                   <button className="px-3 py-2 bg-blue-600 rounded" onClick={savePostResult}>Save</button>
-                  <button className="px-3 py-2 bg-slate-600 rounded" onClick={()=>navigator.clipboard.writeText(postResult.caption + '\n\n' + postResult.hashtags)}>Copy</button>
+                  <button className="px-3 py-2 bg-slate-600 rounded" onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.clipboard) {
+                      navigator.clipboard.writeText(postResult.caption + '\n\n' + postResult.hashtags);
+                      alert("Copied to clipboard");
+                    } else {
+                      alert("Clipboard not available");
+                    }
+                  }}>Copy</button>
                 </div>
               </div>
             )}
@@ -343,7 +388,7 @@ export default function ApptivateAIMarketing() {
             <h2 className="font-bold">Quick Audit</h2>
             <p className="text-slate-300 text-sm">Paste a website or social profile URL and get quick issues & fixes.</p>
             <div className="mt-3 flex gap-2">
-              <input className="flex-1 p-2 rounded bg-slate-600" placeholder="Paste URL" value={auditUrl} onChange={(e)=>setAuditUrl(e.target.value)} />
+              <input className="flex-1 p-2 rounded bg-slate-600" placeholder="Paste URL" value={auditUrl} onChange={(e) => setAuditUrl(e.target.value)} />
               <button className="px-3 py-2 bg-blue-600 rounded" onClick={handleAudit}>Analyze</button>
             </div>
 
@@ -351,15 +396,22 @@ export default function ApptivateAIMarketing() {
               <div className="mt-4 bg-slate-800 p-3 rounded">
                 <h3 className="font-medium">Audit Result</h3>
                 <ol className="mt-2 list-decimal ml-5">
-                  {auditResult.issues.map((it,idx)=> <li key={idx}>{it}</li>)}
+                  {auditResult.issues.map((it, idx) => <li key={idx}>{it}</li>)}
                 </ol>
                 <h4 className="mt-3">Quick Fixes</h4>
                 <ul className="mt-1 list-disc ml-5 text-slate-300">
-                  {auditResult.fixes.map((f,idx)=> <li key={idx}>{f}</li>)}
+                  {auditResult.fixes.map((f, idx) => <li key={idx}>{f}</li>)}
                 </ul>
                 <div className="mt-3 flex gap-2">
                   <button className="px-3 py-2 bg-blue-600 rounded" onClick={saveAuditResult}>Save</button>
-                  <button className="px-3 py-2 bg-slate-600 rounded" onClick={()=>navigator.clipboard.writeText(auditResult.quickPost)}>Copy Quick Post</button>
+                  <button className="px-3 py-2 bg-slate-600 rounded" onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.clipboard) {
+                      navigator.clipboard.writeText(auditResult.quickPost);
+                      alert("Copied quick post");
+                    } else {
+                      alert("Clipboard not available");
+                    }
+                  }}>Copy Quick Post</button>
                 </div>
               </div>
             )}
@@ -380,7 +432,7 @@ export default function ApptivateAIMarketing() {
               </select>
             </div>
             <div className="mt-3 flex gap-2">
-              <button className="px-3 py-2 bg-blue-600 rounded" onClick={async ()=>{ const res = await callAI('Write a short WhatsApp and email sales message for local lead', 'chat'); alert(res); }}>Generate</button>
+              <button className="px-3 py-2 bg-blue-600 rounded" onClick={async () => { const res = await callAI('Write a short WhatsApp and email sales message for local lead', 'chat'); alert(res); }}>Generate</button>
             </div>
           </div>
         )}
@@ -391,8 +443,8 @@ export default function ApptivateAIMarketing() {
             <h2 className="font-bold">Manual Growth Tracker</h2>
             <p className="text-slate-300 text-sm">Record weekly followers and project count.</p>
             <div className="mt-3 grid md:grid-cols-2 gap-2">
-              <input className="p-2 rounded bg-slate-600" placeholder="Followers" value={followers} onChange={(e)=>setFollowers(e.target.value)} />
-              <input className="p-2 rounded bg-slate-600" placeholder="Projects" value={projects} onChange={(e)=>setProjects(e.target.value)} />
+              <input className="p-2 rounded bg-slate-600" placeholder="Followers" value={followers} onChange={(e) => setFollowers(e.target.value)} />
+              <input className="p-2 rounded bg-slate-600" placeholder="Projects" value={projects} onChange={(e) => setProjects(e.target.value)} />
             </div>
             <div className="mt-3 flex gap-2">
               <button className="px-3 py-2 bg-blue-600 rounded" onClick={addGrowthEntry}>Save</button>
@@ -400,7 +452,7 @@ export default function ApptivateAIMarketing() {
             <div className="mt-4">
               <h3 className="font-medium">History</h3>
               <ul className="mt-2 space-y-2">
-                {growthEntries.map((g,i)=> (
+                {growthEntries.map((g, i) => (
                   <li key={i} className="bg-slate-800 p-2 rounded">{new Date(g.date).toLocaleDateString()} — Followers: {g.followers} / Projects: {g.projects}</li>
                 ))}
               </ul>
